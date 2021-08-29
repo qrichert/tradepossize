@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en-US" dir="ltr">
+	<head>
+		<meta charset="utf-8">
+		<meta name="robots" content="noindex,nofollow">
+		<title>Trade Position Size Calculator</title>
+		<meta name="description" content="">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, shrink-to-fit=no">
+
+		<style>
+			:root {
+				--fontSize: 16px;
+				--fontSizeSmall: .75rem;
+				--fontFamily: sans-serif;
+				--defaultSpacing: 20px;
+				--halfSpacing: calc(var(--defaultSpacing) / 2);
+				--mainColor: white;
+				--secondaryColor: #455264;
+				--mainBackground: #18212b;
+				--darkBackground: #101b24;
+				--semiDarkBackground: #131c26b3;
+			}
+
+			* { outline: none; }
+
+			html {
+				font-size: var(--fontSize);
+				-webkit-font-smoothing: antialiased;
+				-moz-osx-font-smoothing: grayscale;
+			}
+
+			body {
+				width: 100vw;
+				height: 100vh;
+				margin: 0;
+				padding: var(--defaultSpacing);
+				display: flex;
+				box-sizing: border-box;
+				background-color: var(--mainBackground);
+				color: white;
+				font-family: var(--fontFamily);
+			}
+
+			form {
+				width: 100%;
+				max-width: 639px;
+				margin: auto;
+			}
+
+			input {
+				-webkit-appearance: none;
+				-moz-appearance: none;
+				appearance: none;
+				font-size: var(--fontSize);
+				padding: 12px 10px;
+				background-color: var(--darkBackground);
+				color: inherit;
+				border: none;
+				border-radius: 3px;
+			}
+
+			input[readonly] {
+				background-color: var(--semiDarkBackground);
+				text-align: right;
+			}
+
+			::placeholder { color: var(--secondaryColor); }
+
+			hr {
+				border: none;
+				border-top: 1px solid var(--secondaryColor);
+				width: 100%;
+			}
+
+			.info {
+				font-size: var(--fontSizeSmall);
+				color: var(--secondaryColor);
+			}
+
+			@media all and (max-width: 449px) {
+				form {
+					display: flex;
+					flex-direction: column;
+				}
+
+				form > * { margin: 0 0 var(--halfSpacing) 0; }
+				form > input,
+				form > hr { margin-bottom: var(--defaultSpacing); }
+			}
+
+			@media all and (min-width: 450px) {
+				form {
+					display: grid;
+					grid-template-columns: repeat(2, 1fr);
+					gap: var(--halfSpacing);
+					align-items: center;
+				}
+
+				hr, .explanation {
+					grid-column: 1 / span 2;
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<form action="#" method="post">
+			<label for="tradingCapital">Trading Capital <span class="info">$</span></label>
+			<input type="number" id="tradingCapital" name="tradingCapital" min="0" step=".01" placeholder="1000,00"/>
+			<label for="riskPerTrade">Risk Per Trade <span class="info">%</span></label>
+			<input type="number" id="riskPerTrade" name="riskPerTrade" min="0" step=".1" placeholder="1,0"/>
+			<label for="riskPerTradeAmount">Risk Per Trade <span class="info">$</span></label>
+			<input type="text" id="riskPerTradeAmount" name="riskPerTradeAmount" readonly placeholder="10,00"/>
+			<p id="riskPerTradeExplanation" class="info explanation" data-raw-str="Each trade will risk %{riskPerTrade}% of your trading capital = %{riskPerTradeAmount}"></p>
+			<hr>
+			<label for="riskOnTrade">Risk On Trade <span class="info">%</span></label>
+			<input type="number" id="riskOnTrade" name="riskOnTrade" min="0" step=".01" placeholder="3,00"/>
+			<label for="leverage">Leverage <span class="info">×</span></label>
+			<input type="number" id="leverage" name="leverage" min="1" step="1" placeholder="5"/>
+			<label for="positionSize">Position Size <span class="info">$</span></label>
+			<input type="text" id="positionSize" name="positionSize" readonly placeholder="66,67"/>
+			<p id="positionSizeExplanation" class="info explanation" data-raw-str="%{riskOnTrade}% of %{positionSize} @ ×%{leverage} leverage = %{riskPerTradeAmount} (risk per trade)"></p>
+			<hr>
+			<label for="winRate">Win Rate <span class="info">%</span></label>
+			<input type="number" id="winRate" name="winRate" min="0" step=".1" placeholder="25,0"/>
+			<label for="minRewardToRiskRatio">Min. R/R Ratio <span class="info">R:R</span></label>
+			<input type="text" id="minRewardToRiskRatio" name="minRewardToRiskRatio" readonly step=".01" placeholder="3"/>
+			<p id="winRateExplanation" class="info explanation" data-raw-str="A win rate of %{winRate}% requires at least a reward/risk ratio of %{minRewardToRiskRatio} to break even"></p>
+		</form>
+		<script>
+			(function() {
+				document.querySelectorAll('form').forEach(el => {
+					el.addEventListener('submit', e => e.preventDefault(), false);
+				});
+
+				let allInputs = document.querySelectorAll('input[type=number]');
+				let allResults = document.querySelectorAll('input[type=text]');
+
+				/**
+				 * Read state from localStorage and return it.
+				 * If no state saved, use default values.
+				 */
+				let loadStateFromStorage = () => {
+					if (localStorage.getItem('state') == null)
+						return {
+							tradingCapital: 1000,
+							riskPerTrade: 1,
+							riskOnTrade: 3,
+							leverage: 5,
+							winRate: 25,
+						};
+					return JSON.parse(localStorage.getItem('state'));
+				};
+				let state = loadStateFromStorage();
+
+				/**
+				 * Save state to localStorage.
+				 */
+				let saveStateToStorage = () => {
+					localStorage.setItem('state', JSON.stringify(state));
+				};
+
+				/**
+				 * Apply state to inputs.
+				 * If value missing or null -> set to 0.0
+				 */
+				let updateInputsFromState = () => {
+					for (let el of allInputs) {
+						if (!(el.name in state) || state[el.name] == null)
+							state[el.name] = 0.0;
+						el.value = state[el.name];
+					}
+				};
+				updateInputsFromState();
+
+				/**
+				 * Update state with input values.
+				 */
+				let updateStateFromInputs = () => {
+					state = {}; // clear state
+					for (let el of allInputs)
+						state[el.name] = parseFloat(el.value);
+					saveStateToStorage();
+				};
+
+				/**
+				 * Calculate values.
+				 */
+				let recalculateValues = () => {
+					for (let el of allResults) {
+						if (el.name == 'riskPerTradeAmount') {
+							let riskPerTradeAmount = state.tradingCapital * (state.riskPerTrade/100);
+							if (Number.isNaN(riskPerTradeAmount))
+								riskPerTradeAmount = 0;
+							el.value = riskPerTradeAmount;
+						}
+						else if (el.name == 'positionSize') {
+							let positionSize = (state.tradingCapital * (state.riskPerTrade/100)) / (state.riskOnTrade/100) / state.leverage;
+							if (Number.isNaN(positionSize))
+								positionSize = 0;
+							if (positionSize >= state.tradingCapital)
+								positionSize = state.tradingCapital;
+							el.value = positionSize;
+						}
+						else if (el.name == 'minRewardToRiskRatio') {
+							let minRewardToRiskRatio = (1 / (state.winRate/100)) - 1;
+							if (minRewardToRiskRatio == Infinity)
+								minRewardToRiskRatio = 0;
+							el.value = minRewardToRiskRatio;
+						}
+					}
+
+					// Format results (styling)
+					for (let el of [...allInputs, ...allResults]) {
+						if (el.name == 'riskPerTrade')
+							el.value = parseFloat(el.value).toFixed(1);
+						else if (el.name == 'riskPerTradeAmount' || el.name == 'positionSize')
+							el.value = `$${parseFloat(el.value).toFixed(2)}`;
+						else if (el.name == 'leverage') {
+							let value = parseFloat(el.value).toFixed(0);
+							el.value = value >= 1 ? value : 1;
+						}
+						else if (el.name == 'winRate')
+							el.value = parseFloat(el.value).toFixed(1);
+						else if (el.name == 'minRewardToRiskRatio')
+							el.value = `${Math.round(el.value * 100) / 100}:1`;
+						else
+							el.value = parseFloat(el.value).toFixed(2);
+					}
+					// for (let el of allResults)
+					//	el.value = el.value.replace('.', ',');
+				};
+
+				let updateExplanations = () => {
+					// Explanations
+					for (let explanation of ['riskPerTradeExplanation',
+											 'positionSizeExplanation',
+											 'winRateExplanation']) {
+						explanation = document.getElementById(explanation);
+						let str = explanation.dataset.rawStr;
+						str = explanation.dataset.rawStr;
+						str = str.replace('%{riskPerTradeAmount}', document.getElementById('riskPerTradeAmount').value);
+						str = str.replace('%{riskPerTrade}', state.riskPerTrade);
+						str = str.replace('%{riskOnTrade}', state.riskOnTrade);
+						str = str.replace('%{positionSize}', document.getElementById('positionSize').value);
+						str = str.replace('%{leverage}', state.leverage);
+						str = str.replace('%{winRate}', state.winRate);
+						str = str.replace('%{minRewardToRiskRatio}', document.getElementById('minRewardToRiskRatio').value);
+						explanation.textContent = str;
+					}
+				};
+
+				// Save input value change to localStorage
+				let updateState = (e = null) => {
+					if (e != null && e.type == 'keyup' && e.key == 'Backspace')
+						return;
+
+					updateStateFromInputs();
+					recalculateValues();
+					updateExplanations();
+				};
+				updateState();
+
+				allInputs.forEach(el => {
+					el.addEventListener('change', e => updateState(e), false);
+				});
+			})();
+		</script>
+	</body>
+</html>

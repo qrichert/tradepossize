@@ -19,6 +19,7 @@
 				--mainBackground: #18212b;
 				--darkBackground: #101b24;
 				--semiDarkBackground: #131c26b3;
+				--borderRadius: 3px;
 			}
 
 			* { outline: none; }
@@ -47,7 +48,8 @@
 				margin: auto;
 			}
 
-			input {
+			input[type=number],
+			input[type=text] {
 				-webkit-appearance: none;
 				-moz-appearance: none;
 				appearance: none;
@@ -56,15 +58,38 @@
 				background-color: var(--darkBackground);
 				color: inherit;
 				border: none;
-				border-radius: 3px;
+				border-radius: var(--borderRadius);
 			}
 
-			input[readonly] {
+			input[type=number][readonly],
+			input[type=text][readonly] {
 				background-color: var(--semiDarkBackground);
 				text-align: right;
 			}
 
 			::placeholder { color: var(--secondaryColor); }
+
+			input[type=radio] {
+				display: none;
+			}
+
+			input[type=radio] + label {
+				padding: 4px 7px;
+				border: 1px solid transparent;
+				border-radius: var(--borderRadius);
+			}
+
+			input[type=radio]:checked + label {
+				border-color: var(--secondaryColor);
+			}
+
+			#currencySelector {
+				display: flex;
+				flex-direction: row;
+				justify-content: flex-end;
+				font-size: var(--fontSizeSmall);
+				color: var(--secondaryColor);
+			}
 
 			hr {
 				border: none;
@@ -96,7 +121,9 @@
 					align-items: center;
 				}
 
-				hr, .explanation {
+				hr,
+				.explanation,
+				#currencySelector {
 					grid-column: 1 / span 2;
 				}
 			}
@@ -104,26 +131,34 @@
 	</head>
 	<body>
 		<form action="#" method="post">
-			<label for="tradingCapital">Trading Capital <span class="info">$</span></label>
-			<input type="number" id="tradingCapital" name="tradingCapital" min="0" step=".01" placeholder="1000,00"/>
+			<div id="currencySelector">
+				<input type="radio" id="currencyUSD" name="currency" value="USD" data-symbol="$" data-display="$%{amount}" data-decimals="2" checked>
+				<label for="currencyUSD">USD</label>
+				<input type="radio" id="currencyEUR" name="currency" value="EUR" data-symbol="€" data-display="%{amount} €" data-decimals="2">
+				<label for="currencyEUR">EUR</label>
+				<input type="radio" id="currencyBTC" name="currency" value="BTC" data-symbol="₿" data-display="₿%{amount}" data-decimals="8">
+				<label for="currencyBTC">BTC</label>
+			</div>
+			<label for="tradingCapital">Trading Capital <span class="info"><span class="currencySymbol"></span></span></label>
+			<input type="number" id="tradingCapital" name="tradingCapital" min="0" placeholder="1000,00">
 			<label for="riskPerTrade">Risk Per Trade <span class="info">%</span></label>
-			<input type="number" id="riskPerTrade" name="riskPerTrade" min="0" step=".1" placeholder="1,0"/>
-			<label for="riskPerTradeAmount">Risk Per Trade <span class="info">$</span></label>
-			<input type="text" id="riskPerTradeAmount" name="riskPerTradeAmount" readonly placeholder="10,00"/>
+			<input type="number" id="riskPerTrade" name="riskPerTrade" min="0" step=".1" placeholder="1,0">
+			<label for="riskPerTradeAmount">Risk Per Trade <span class="info"><span class="currencySymbol"></span></span></label>
+			<input type="text" id="riskPerTradeAmount" name="riskPerTradeAmount" readonly placeholder="10,00">
 			<p id="riskPerTradeExplanation" class="info explanation" data-raw-str="Each trade will risk %{riskPerTrade}% of your trading capital = %{riskPerTradeAmount}"></p>
 			<hr>
 			<label for="riskOnTrade">Risk On Trade <span class="info">%</span></label>
-			<input type="number" id="riskOnTrade" name="riskOnTrade" min="0" step=".01" placeholder="3,00"/>
+			<input type="number" id="riskOnTrade" name="riskOnTrade" min="0" step=".01" placeholder="3,00">
 			<label for="leverage">Leverage <span class="info">×</span></label>
-			<input type="number" id="leverage" name="leverage" min="1" step="1" placeholder="5"/>
-			<label for="positionSize">Position Size <span class="info">$</span></label>
-			<input type="text" id="positionSize" name="positionSize" readonly placeholder="66,67"/>
+			<input type="number" id="leverage" name="leverage" min="1" step="1" placeholder="5">
+			<label for="positionSize">Position Size <span class="info"><span class="currencySymbol"></span></span></label>
+			<input type="text" id="positionSize" name="positionSize" readonly placeholder="66,67">
 			<p id="positionSizeExplanation" class="info explanation" data-raw-str="%{riskOnTrade}% of %{positionSize} @ ×%{leverage} leverage = %{riskPerTradeAmount} (risk per trade)"></p>
 			<hr>
 			<label for="winRate">Win Rate <span class="info">%</span></label>
-			<input type="number" id="winRate" name="winRate" min="0" step=".1" placeholder="25,0"/>
+			<input type="number" id="winRate" name="winRate" min="0" step=".1" placeholder="25,0">
 			<label for="minRewardToRiskRatio">Min. R/R Ratio <span class="info">R:R</span></label>
-			<input type="text" id="minRewardToRiskRatio" name="minRewardToRiskRatio" readonly step=".01" placeholder="3"/>
+			<input type="text" id="minRewardToRiskRatio" name="minRewardToRiskRatio" readonly step=".01" placeholder="3">
 			<p id="winRateExplanation" class="info explanation" data-raw-str="A win rate of %{winRate}% requires at least a reward/risk ratio of %{minRewardToRiskRatio} to break even"></p>
 		</form>
 		<script>
@@ -132,8 +167,57 @@
 					el.addEventListener('submit', e => e.preventDefault(), false);
 				});
 
+				let currency = [...document.querySelectorAll('input[name=currency]')];
 				let allInputs = document.querySelectorAll('input[type=number]');
 				let allResults = document.querySelectorAll('input[type=text]');
+
+				/**
+				 * Get selected currency as string value.
+				 */
+				let getSelectedCurrency = () => {
+					for (let el of currency)
+						if (el.checked)
+							return el.value;
+				};
+
+				/**
+				 * Set selected currency from string value.
+				 */
+				let setSelectedCurrency = selectedCurrency => {
+					currency.forEach(el => {
+						el.checked = el.value == selectedCurrency
+					});
+				};
+
+				/**
+				 * Get symbol associated with currency.
+				 */
+				let getCurrencySymbol = () => {
+					let currencyStr = getSelectedCurrency();
+					for (let el of currency)
+						if (el.value == currencyStr)
+							return el.dataset.symbol;
+				};
+
+				/**
+				 * Get display associated with currency.
+				 */
+				let getCurrencyDisplay = () => {
+					let currencyStr = getSelectedCurrency();
+					for (let el of currency)
+						if (el.value == currencyStr)
+							return el.dataset.display;
+				};
+
+				/**
+				 * Get number of decimals associated with currency.
+				 */
+				let getCurrencyDecimals = () => {
+					let currencyStr = getSelectedCurrency();
+					for (let el of currency)
+						if (el.value == currencyStr)
+							return parseInt(el.dataset.decimals, 10);
+				};
 
 				/**
 				 * Read state from localStorage and return it.
@@ -142,6 +226,7 @@
 				let loadStateFromStorage = () => {
 					if (localStorage.getItem('state') == null)
 						return {
+							currency: 'USD',
 							tradingCapital: 1000,
 							riskPerTrade: 1,
 							riskOnTrade: 3,
@@ -164,6 +249,7 @@
 				 * If value missing or null -> set to 0.0
 				 */
 				let updateInputsFromState = () => {
+					setSelectedCurrency(state.currency);
 					for (let el of allInputs) {
 						if (!(el.name in state) || state[el.name] == null)
 							state[el.name] = 0.0;
@@ -177,6 +263,7 @@
 				 */
 				let updateStateFromInputs = () => {
 					state = {}; // clear state
+					state['currency'] = getSelectedCurrency();
 					for (let el of allInputs)
 						state[el.name] = parseFloat(el.value);
 					saveStateToStorage();
@@ -187,7 +274,7 @@
 				 */
 				let recalculateValues = () => {
 					for (let el of allResults) {
-						if (el.name == 'riskPerTradeAmount') {
+						if (el.name == 'riskPerTradeAmount') {
 							let riskPerTradeAmount = state.tradingCapital * (state.riskPerTrade/100);
 							if (Number.isNaN(riskPerTradeAmount))
 								riskPerTradeAmount = 0;
@@ -211,10 +298,14 @@
 
 					// Format results (styling)
 					for (let el of [...allInputs, ...allResults]) {
-						if (el.name == 'riskPerTrade')
+						if (el.name == 'tradingCapital') {
+							el.step = '.' + '1'.padStart(getCurrencyDecimals(), '0');
+							el.value = parseFloat(el.value).toFixed(getCurrencyDecimals());
+						}
+						else if (el.name == 'riskPerTrade')
 							el.value = parseFloat(el.value).toFixed(1);
 						else if (el.name == 'riskPerTradeAmount' || el.name == 'positionSize')
-							el.value = `$${parseFloat(el.value).toFixed(2)}`;
+							el.value = getCurrencyDisplay().replace('%{amount}', parseFloat(el.value).toFixed(getCurrencyDecimals()));
 						else if (el.name == 'leverage') {
 							let value = parseFloat(el.value).toFixed(0);
 							el.value = value >= 1 ? value : 1;
@@ -226,8 +317,8 @@
 						else
 							el.value = parseFloat(el.value).toFixed(2);
 					}
-					// for (let el of allResults)
-					//	el.value = el.value.replace('.', ',');
+
+					document.querySelectorAll('.currencySymbol').forEach(el => el.textContent = getCurrencySymbol());
 				};
 
 				let updateExplanations = () => {
@@ -253,14 +344,13 @@
 				let updateState = (e = null) => {
 					if (e != null && e.type == 'keyup' && e.key == 'Backspace')
 						return;
-
 					updateStateFromInputs();
 					recalculateValues();
 					updateExplanations();
 				};
 				updateState();
 
-				allInputs.forEach(el => {
+				[...currency, ...allInputs].forEach(el => {
 					el.addEventListener('change', e => updateState(e), false);
 				});
 			})();

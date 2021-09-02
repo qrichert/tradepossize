@@ -48,7 +48,7 @@
 				margin: auto;
 			}
 
-			#currencySelector {
+			.formSettings {
 				display: flex;
 				flex-direction: row;
 				justify-content: flex-end;
@@ -77,15 +77,18 @@
 
 			::placeholder { color: var(--secondaryColor); }
 
-			input[type=radio] { display: none; }
+			input[type=radio],
+			input[type=checkbox] { display: none; }
 
-			input[type=radio] + label {
+			input[type=radio] + label,
+			input[type=checkbox] + label {
 				padding: 4px 7px;
 				border: 1px solid transparent;
 				border-radius: var(--borderRadius);
 			}
 
-			input[type=radio]:checked + label {
+			input[type=radio]:checked + label,
+			input[type=checkbox]:checked + label {
 				border-color: var(--secondaryColor);
 			}
 
@@ -124,7 +127,7 @@
 					align-items: center;
 				}
 
-				#currencySelector,
+				.formSettings,
 				hr,
 				.explanation {
 					grid-column: 1 / span 2;
@@ -134,7 +137,7 @@
 	</head>
 	<body>
 		<form action="#" method="post">
-			<div id="currencySelector">
+			<div class="formSettings">
 				<input type="radio" id="currencyUSD" name="currency" value="USD" data-symbol="$" data-display="$%{amount}" data-decimals="2" checked>
 				<label for="currencyUSD">USD</label>
 				<input type="radio" id="currencyEUR" name="currency" value="EUR" data-symbol="€" data-display="%{amount} €" data-decimals="2">
@@ -158,6 +161,10 @@
 			<input type="text" id="positionSize" name="positionSize" class="copy" readonly>
 			<label for="margin">Margin <span class="info"><span class="currencySymbol"></span></span></label>
 			<input type="text" id="margin" name="margin" class="copy" readonly>
+			<div class="formSettings">
+				<input type="checkbox" id="autoLeverage" name="autoLeverage">
+				<label for="autoLeverage">Auto Leverage</label>
+			</div>
 			<p id="positionSizeExplanation" class="info explanation" data-raw-str="%{riskOnTrade}% of %{positionSize} (%{margin} @ %{leverage}×) = %{amountAtRisk} (risk per trade)"></p>
 			<hr>
 			<label for="winRate">Win Rate <span class="info">%</span></label>
@@ -172,9 +179,17 @@
 					el.addEventListener('submit', e => e.preventDefault(), false);
 				});
 
-				let currency = [...document.querySelectorAll('input[name=currency]')];
+				let currencySetting = [...document.querySelectorAll('input[name=currency]')];
+				let autoLeverageSetting = document.getElementById('autoLeverage');
+				let allSettings = [...currencySetting, autoLeverageSetting];
 				let allInputs = document.querySelectorAll('input[type=number]');
 				let allResults = document.querySelectorAll('input[type=text]');
+
+				let amountAtRiskInput = document.getElementById('amountAtRisk');
+				let leverageInput = document.getElementById('leverage');
+				let positionSizeInput = document.getElementById('positionSize');
+				let marginInput = document.getElementById('margin');
+				let minRewardToRiskRatioInput = document.getElementById('minRewardToRiskRatio');
 
 				document.querySelectorAll('.copy').forEach(el => {
 					el.addEventListener('click', e => {
@@ -188,7 +203,7 @@
 				 * Get selected currency as string value.
 				 */
 				let getSelectedCurrency = () => {
-					for (let el of currency)
+					for (let el of currencySetting)
 						if (el.checked)
 							return el.value;
 				};
@@ -197,7 +212,7 @@
 				 * Set selected currency from string value.
 				 */
 				let setSelectedCurrency = selectedCurrency => {
-					currency.forEach(el => {
+					currencySetting.forEach(el => {
 						el.checked = el.value == selectedCurrency;
 					});
 				};
@@ -206,9 +221,9 @@
 				 * Get symbol associated with currency.
 				 */
 				let getCurrencySymbol = () => {
-					let currencyStr = getSelectedCurrency();
-					for (let el of currency) {
-						if (el.value == currencyStr)
+					let currency = getSelectedCurrency();
+					for (let el of currencySetting) {
+						if (el.value == currency)
 							return el.dataset.symbol;
 					}
 				};
@@ -217,9 +232,9 @@
 				 * Get display associated with currency.
 				 */
 				let getCurrencyDisplay = () => {
-					let currencyStr = getSelectedCurrency();
-					for (let el of currency) {
-						if (el.value == currencyStr)
+					let currency = getSelectedCurrency();
+					for (let el of currencySetting) {
+						if (el.value == currency)
 							return el.dataset.display;
 					}
 				};
@@ -228,11 +243,33 @@
 				 * Get number of decimals associated with currency.
 				 */
 				let getCurrencyDecimals = () => {
-					let currencyStr = getSelectedCurrency();
-					for (let el of currency) {
-						if (el.value == currencyStr)
+					let currency = getSelectedCurrency();
+					for (let el of currencySetting) {
+						if (el.value == currency)
 							return parseInt(el.dataset.decimals, 10);
 					}
+				};
+
+				/**
+				 * Get auto leverage setting as boolean.
+				 */
+				let getAutoLeverageState = () => {
+					return autoLeverageSetting.checked;
+				};
+
+				/**
+				 * Set auto leverage setting from boolean.
+				 */
+				let setAutoLeverageState = checked => {
+					autoLeverageSetting.checked = checked;
+				};
+
+				/**
+				 * Toggle readOnly attribute of leverage.
+				 */
+				let toggleLeverageReadOnly = readOnly => {
+					leverageInput.readOnly = readOnly;
+					leverageInput.type = readOnly ? 'text' : 'number';
 				};
 
 				/**
@@ -247,6 +284,7 @@
 							riskPerTrade: 1,
 							riskOnTrade: 3,
 							leverage: 5,
+							autoLeverage: false,
 							winRate: 25,
 						};
 					}
@@ -267,6 +305,7 @@
 				 */
 				let updateInputsFromState = () => {
 					setSelectedCurrency(state.currency || 'USD');
+					setAutoLeverageState(state.autoLeverage);
 					for (let el of allInputs) {
 						if (!(el.name in state) || state[el.name] == null)
 							state[el.name] = 0;
@@ -281,6 +320,7 @@
 				let updateStateFromInputs = () => {
 					state = {}; // clear state
 					state.currency = getSelectedCurrency();
+					state.autoLeverage = getAutoLeverageState();
 					for (let el of allInputs)
 						state[el.name] = parseFloat(el.value);
 					saveStateToStorage();
@@ -316,6 +356,7 @@
 				 * Calculate values.
 				 */
 				let recalculateValues = () => {
+					toggleLeverageReadOnly(state.autoLeverage);
 					for (let el of allResults) {
 						if (el.name == 'amountAtRisk') {
 							let amountAtRisk = state.totalEquity * (state.riskPerTrade/100);
@@ -328,6 +369,13 @@
 							if (!isValidNumber(positionSize))
 								positionSize = 0;
 							el.value = positionSize;
+							// Auto Leverage
+							if (state.autoLeverage) {
+								let amountAtRisk = state.totalEquity * (state.riskPerTrade/100);
+								if (!isValidNumber(amountAtRisk))
+									amountAtRisk = 0;
+								leverageInput.value = state.leverage = positionSize / amountAtRisk;
+							}
 						}
 						else if (el.name == 'margin') {
 							let margin = (state.totalEquity * (state.riskPerTrade/100)) / (state.riskOnTrade/100) / state.leverage;
@@ -375,14 +423,14 @@
 						explanation = document.getElementById(explanation);
 						let str = explanation.dataset.rawStr;
 						str = explanation.dataset.rawStr;
-						str = str.replace('%{amountAtRisk}', document.getElementById('amountAtRisk').value);
+						str = str.replace('%{amountAtRisk}', amountAtRiskInput.value);
 						str = str.replace('%{riskPerTrade}', state.riskPerTrade);
 						str = str.replace('%{riskOnTrade}', state.riskOnTrade);
-						str = str.replace('%{positionSize}', document.getElementById('positionSize').value);
-						str = str.replace('%{margin}', document.getElementById('margin').value);
-						str = str.replace('%{leverage}', state.leverage);
+						str = str.replace('%{positionSize}', positionSizeInput.value);
+						str = str.replace('%{margin}', marginInput.value);
+						str = str.replace('%{leverage}', leverageInput.value);
 						str = str.replace('%{winRate}', state.winRate);
-						str = str.replace('%{minRewardToRiskRatio}', document.getElementById('minRewardToRiskRatio').value);
+						str = str.replace('%{minRewardToRiskRatio}', minRewardToRiskRatioInput.value);
 						explanation.textContent = str;
 					}
 				};
@@ -398,7 +446,7 @@
 				};
 				updateState();
 
-				[...currency, ...allInputs].forEach(el => {
+				[...allSettings, ...allInputs].forEach(el => {
 					el.addEventListener('change', e => updateState(e), false);
 				});
 			})();

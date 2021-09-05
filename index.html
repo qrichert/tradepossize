@@ -143,11 +143,11 @@
 	<body>
 		<form action="#" method="post">
 			<div class="formSettings">
-				<input type="radio" id="currencyUSD" name="currency" value="USD" data-symbol="$" data-display="$%{amount}" data-decimal-places="2">
+				<input type="radio" id="currencyUSD" name="currency" value="USD" data-symbol="$" data-display="$%{amount,.2}">
 				<label for="currencyUSD">USD</label>
-				<input type="radio" id="currencyEUR" name="currency" value="EUR" data-symbol="€" data-display="%{amount} €" data-decimal-places="2">
+				<input type="radio" id="currencyEUR" name="currency" value="EUR" data-symbol="€" data-display="%{amount ,2} €">
 				<label for="currencyEUR">EUR</label>
-				<input type="radio" id="currencyBTC" name="currency" value="BTC" data-symbol="₿" data-display="₿%{amount}" data-decimal-places="8">
+				<input type="radio" id="currencyBTC" name="currency" value="BTC" data-symbol="₿" data-display="%{amountx.8} BTC">
 				<label for="currencyBTC">BTC</label>
 			</div>
 			<label for="totalEquity">Total Equity <span class="info"><span class="currencySymbol"></span></span></label>
@@ -223,36 +223,30 @@
 				};
 
 				/**
-				 * Get symbol associated with currency.
-				 */
-				let getCurrencySymbol = () => {
-					let currency = getSelectedCurrency();
-					for (let el of currencySetting) {
-						if (el.value == currency)
-							return el.dataset.symbol;
-					}
-				};
-
-				/**
 				 * Get display associated with currency.
 				 */
 				let getCurrencyDisplay = () => {
 					let currency = getSelectedCurrency();
+					let currencyDisplay = {
+						symbol: '',
+						format: '',
+						thousandsSeparator: '',
+						decimalSeparator: '',
+						decimalPlaces: '',
+					};
 					for (let el of currencySetting) {
-						if (el.value == currency)
-							return el.dataset.display;
+						if (el.value == currency) {
+							let display = el.dataset.display;
+							let match = /%{amount(.+?)}/.exec(display); // e.g. $%{amount,.2}
+							currencyDisplay.symbol = el.dataset.symbol;
+							currencyDisplay.format = display.replace(match[1], ''); // '%{amount}'
+							currencyDisplay.thousandsSeparator = match[1][0] != 'x' ? match[1][0] : ''; // ','
+							currencyDisplay.decimalSeparator = match[1][1]; // '.'
+							currencyDisplay.decimalPlaces = parseInt(match[1][2]); // 2
+							break;
+						}
 					}
-				};
-
-				/**
-				 * Get number of decimal places associated with currency.
-				 */
-				let getCurrencyDecimalPlaces = () => {
-					let currency = getSelectedCurrency();
-					for (let el of currencySetting) {
-						if (el.value == currency)
-							return parseInt(el.dataset.decimalPlaces, 10);
-					}
+					return currencyDisplay;
 				};
 
 				/**
@@ -392,16 +386,22 @@
 					}
 
 					// Format results (styling)
+					let currencyDisplay = getCurrencyDisplay();
 					for (let el of [...allInputs, ...allResults]) {
 						if (el.name == 'totalEquity') {
-							el.step = '.' + '1'.padStart(getCurrencyDecimalPlaces(), '0');
-							el.value = parseFloat(el.value).toFixed(getCurrencyDecimalPlaces());
+							el.step = '.' + '1'.padStart(currencyDisplay.decimalPlaces, '0');
+							el.value = parseFloat(el.value).toFixed(currencyDisplay.decimalPlaces);
 						}
 						else if (el.name == 'riskPerTrade')
 							el.value = parseFloat(el.value).toFixed(1);
 						else if (['amountAtRisk', 'positionSize', 'margin'].includes(el.name)) {
-							let amount = parseFloat(el.value).toFixed(getCurrencyDecimalPlaces());
-							el.value = getCurrencyDisplay().replace('%{amount}', amount);
+							let amount = parseFloat(el.value).toFixed(currencyDisplay.decimalPlaces);
+							let displayAmount = `${amount}`;
+							displayAmount = displayAmount.split('.');
+							displayAmount[0] = displayAmount[0].replace(/(\d)(?=(?:\d{3})+(?!\d))/g, '$1'+currencyDisplay.thousandsSeparator);
+							displayAmount = displayAmount.join(currencyDisplay.decimalSeparator);
+							displayAmount = currencyDisplay.format.replace('%{amount}', displayAmount)
+							el.value = displayAmount;
 							el.dataset.rawValue = amount;
 						}
 						else if (el.name == 'winRate')
@@ -411,8 +411,7 @@
 						else
 							el.value = parseFloat(el.value).toFixed(2);
 					}
-
-					document.querySelectorAll('.currencySymbol').forEach(el => el.textContent = getCurrencySymbol());
+					document.querySelectorAll('.currencySymbol').forEach(el => el.textContent = currencyDisplay.symbol);
 				};
 
 				let updateExplanations = () => {

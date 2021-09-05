@@ -143,11 +143,11 @@
 	<body>
 		<form action="#" method="post">
 			<div class="formSettings">
-				<input type="radio" id="currencyUSD" name="currency" value="USD" data-symbol="$" data-display="$%{amount}" data-decimals="2" checked>
+				<input type="radio" id="currencyUSD" name="currency" value="USD" data-symbol="$" data-display="$%{amount}" data-decimal-places="2">
 				<label for="currencyUSD">USD</label>
-				<input type="radio" id="currencyEUR" name="currency" value="EUR" data-symbol="€" data-display="%{amount} €" data-decimals="2">
+				<input type="radio" id="currencyEUR" name="currency" value="EUR" data-symbol="€" data-display="%{amount} €" data-decimal-places="2">
 				<label for="currencyEUR">EUR</label>
-				<input type="radio" id="currencyBTC" name="currency" value="BTC" data-symbol="₿" data-display="₿%{amount}" data-decimals="8">
+				<input type="radio" id="currencyBTC" name="currency" value="BTC" data-symbol="₿" data-display="₿%{amount}" data-decimal-places="8">
 				<label for="currencyBTC">BTC</label>
 			</div>
 			<label for="totalEquity">Total Equity <span class="info"><span class="currencySymbol"></span></span></label>
@@ -245,13 +245,13 @@
 				};
 
 				/**
-				 * Get number of decimals associated with currency.
+				 * Get number of decimal places associated with currency.
 				 */
-				let getCurrencyDecimals = () => {
+				let getCurrencyDecimalPlaces = () => {
 					let currency = getSelectedCurrency();
 					for (let el of currencySetting) {
 						if (el.value == currency)
-							return parseInt(el.dataset.decimals, 10);
+							return parseInt(el.dataset.decimalPlaces, 10);
 					}
 				};
 
@@ -282,18 +282,19 @@
 				 * If no state saved, use default values.
 				 */
 				let loadStateFromStorage = () => {
-					if (localStorage.getItem('state') == null) {
+					let stateFromStorage = localStorage.getItem('state');
+					if (!stateFromStorage) {
 						return {
 							currency: 'USD',
 							totalEquity: 1000,
 							riskPerTrade: 1,
 							riskOnTrade: 3,
-							leverage: 5,
-							autoLeverage: false,
+							leverage: 1,
+							autoLeverage: true,
 							winRate: 25,
 						};
 					}
-					return JSON.parse(localStorage.getItem('state'));
+					return JSON.parse(stateFromStorage);
 				};
 				let state = loadStateFromStorage();
 
@@ -323,7 +324,7 @@
 				 * Update state with input values.
 				 */
 				let updateStateFromInputs = () => {
-					state = {}; // clear state
+					state = {}; // Clear state
 					state.currency = getSelectedCurrency();
 					state.autoLeverage = getAutoLeverageState();
 					for (let el of allInputs)
@@ -336,6 +337,10 @@
 				 */
 				let validateInputs = () => {
 					for (let el of allInputs) {
+						// All inputs
+						if (el.value < 0)
+							el.value = 0;
+						// Specifics
 						if (el.name == 'leverage') {
 							if (el.value < 1)
 								el.value = 1;
@@ -344,17 +349,16 @@
 							if (el.value > 100)
 								el.value = 100;
 						}
-						// For all inputs
-						if (el.value < 0)
-							el.value = 0;
 					}
 				};
 
 				/**
-				 * Check if number is valid and can be displayed.
+				 * Return number if valid and can be displayed, else return placeholder.
 				 */
-				let isValidNumber = nb => {
-					return !(Number.isNaN(nb) || nb == Infinity);
+				let sanitizeNumber = (number, placeholder = 0) => {
+					if (Number.isNaN(number) || number == Infinity)
+						return placeholder;
+					return number;
 				};
 
 				/**
@@ -365,47 +369,38 @@
 					for (let el of allResults) {
 						if (el.name == 'amountAtRisk') {
 							let amountAtRisk = state.totalEquity * (state.riskPerTrade/100);
-							if (!isValidNumber(amountAtRisk))
-								amountAtRisk = 0;
-							el.value = amountAtRisk;
+							el.value = sanitizeNumber(amountAtRisk);
 						}
 						else if (el.name == 'positionSize') {
 							let positionSize = (state.totalEquity * (state.riskPerTrade/100)) / (state.riskOnTrade/100);
-							if (!isValidNumber(positionSize))
-								positionSize = 0;
-							el.value = positionSize;
+							el.value = sanitizeNumber(positionSize);
 							// Auto Leverage
 							if (state.autoLeverage) {
 								let amountAtRisk = state.totalEquity * (state.riskPerTrade/100);
-								if (!isValidNumber(amountAtRisk))
-									amountAtRisk = 0;
-								leverageInput.value = state.leverage = positionSize / amountAtRisk;
+								let leverage = positionSize / amountAtRisk;
+								leverageInput.value = state.leverage = sanitizeNumber(leverage);
 							}
 						}
 						else if (el.name == 'margin') {
 							let margin = (state.totalEquity * (state.riskPerTrade/100)) / (state.riskOnTrade/100) / state.leverage;
-							if (!isValidNumber(margin))
-								margin = 0;
-							el.value = margin;
+							el.value = sanitizeNumber(margin);
 						}
 						else if (el.name == 'minRewardToRiskRatio') {
 							let minRewardToRiskRatio = (1 / (state.winRate/100)) - 1;
-							if (!isValidNumber(minRewardToRiskRatio))
-								minRewardToRiskRatio = 0;
-							el.value = minRewardToRiskRatio;
+							el.value = sanitizeNumber(minRewardToRiskRatio);
 						}
 					}
 
 					// Format results (styling)
 					for (let el of [...allInputs, ...allResults]) {
 						if (el.name == 'totalEquity') {
-							el.step = '.' + '1'.padStart(getCurrencyDecimals(), '0');
-							el.value = parseFloat(el.value).toFixed(getCurrencyDecimals());
+							el.step = '.' + '1'.padStart(getCurrencyDecimalPlaces(), '0');
+							el.value = parseFloat(el.value).toFixed(getCurrencyDecimalPlaces());
 						}
 						else if (el.name == 'riskPerTrade')
 							el.value = parseFloat(el.value).toFixed(1);
 						else if (['amountAtRisk', 'positionSize', 'margin'].includes(el.name)) {
-							let amount = parseFloat(el.value).toFixed(getCurrencyDecimals());
+							let amount = parseFloat(el.value).toFixed(getCurrencyDecimalPlaces());
 							el.value = getCurrencyDisplay().replace('%{amount}', amount);
 							el.dataset.rawValue = amount;
 						}
@@ -442,8 +437,6 @@
 
 				// Save input value change to localStorage
 				let updateState = (e = null) => {
-					if (e != null && e.type == 'keyup' && e.key == 'Backspace')
-						return;
 					validateInputs();
 					updateStateFromInputs();
 					recalculateValues();
